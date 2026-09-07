@@ -423,7 +423,7 @@
           <div class="section-title">Canvas Dimensions <span class="tt" tabindex="0" data-tooltip="Resizing keeps whatever's already painted, anchored to the top-left corner.">?</span></div>
           <div class="field-row">
             <div><span class="field-label">Width (cells)</span><input type="number" id="gridWIn" min="20" max="50" value="30"></div>
-            <div><span class="field-label">Height (cells)</span><input type="number" id="gridHIn" min="34" max="127" value="34"></div>
+            <div><span class="field-label">Height (cells)</span><input type="number" id="gridHIn" min="34" max="400" value="34"></div>
           </div>
           <button class="btn ghost full" id="resizeBtn">Apply Resize</button>
 
@@ -1237,7 +1237,7 @@ $('clearBtn').addEventListener('click', () => {
 
 $('resizeBtn').addEventListener('click', () => {
   const newW = clamp(parseInt($('gridWIn').value) || gridW, 20, 50);
-  const newH = clamp(parseInt($('gridHIn').value) || gridH, 34, 127);
+  const newH = clamp(parseInt($('gridHIn').value) || gridH, 34, 400);
   const newGrid = new Array(newW * newH).fill(null);
   for (let y = 0; y < Math.min(gridH, newH); y++) {
     for (let x = 0; x < Math.min(gridW, newW); x++) {
@@ -1398,7 +1398,7 @@ $('exportPngBtn').addEventListener('click', () => {
    ========================================================================= */
 function loadBuildingFromPayload(payload) {
   const w = clamp(parseInt(payload.width) || gridW, 20, 50);
-  const h = clamp(parseInt(payload.height) || gridH, 34, 127);
+  const h = clamp(parseInt(payload.height) || gridH, 34, 400);
   const incoming = Array.isArray(payload.grid) ? payload.grid : [];
   const newGrid = new Array(w * h).fill(null);
   for (let i = 0; i < Math.min(incoming.length, newGrid.length); i++) {
