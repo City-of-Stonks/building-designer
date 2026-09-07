@@ -2,257 +2,486 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Building Designer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* Palette pulled directly from cityofstonks.com/city.css's own :root
+     tokens — real hex values, not a re-guess — so this app-shell sits next
+     to the real site without a seam. Their whole site is set in a system
+     monospace stack (no separate display font); matched here instead of
+     pairing in an unrelated sans.
+  */
   :root{
-    --blueprint:#0B2447; --blueprint-2:#123163; --panel:#0E2A54; --line:#2A5599; --line-soft:rgba(122,167,235,.22);
-    --cyan:#7AD7F0; --cyan-bright:#B8ECFF; --ink:#EAF3FF; --ink-dim:#8FAFDA;
-    --amber:#FFB454; --danger:#FF6B6B; --ok:#5CE0A0;
-    --font-mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
-    --font-sans:'IBM Plex Sans',system-ui,sans-serif;
+    --bg:#060806; --panel:#0C0F0A; --panel-alt:#0A0D08; --panel-raised:#10140C;
+    --border:#1F2A16; --border-strong:#7D9B14;
+    --accent:#CCFF00; --accent-ink:#0B1400;
+    --text:#D7E2CC; --text-muted:#93A187; --text-faint:#5F6B57;
+    --danger:#FF5C4D;
+    --font-mono:ui-monospace,'SF Mono',Menlo,'IBM Plex Mono',monospace;
   }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--blueprint);color:var(--ink);font-family:var(--font-sans);}
-  ::selection{background:var(--cyan);color:var(--blueprint);}
-  button, select, input{font-family:inherit;}
+  html,body{height:100%;overscroll-behavior:none;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-mono);overflow:hidden;}
+  ::selection{background:var(--accent);color:var(--accent-ink);}
+  button, select, input, textarea{font-family:inherit;}
+  button{-webkit-tap-highlight-color:transparent;}
 
-  .bp-grid{
-    position:fixed;inset:0;z-index:-1;
-    background-image:linear-gradient(var(--line-soft) 1px, transparent 1px), linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
-    background-size:28px 28px;
-    background-color:var(--blueprint);
+  /* =======================================================================
+     App shell — the whole point of the rebuild. Fixed to the viewport, no
+     page scroll: a menu bar, a titlebar, a workspace row that fills every
+     remaining pixel, and a status bar, the way a real desktop image editor
+     is laid out. Only individual panel *bodies* scroll internally.
+     ======================================================================= */
+  .app-shell{
+    height:100dvh; height:100vh; display:flex; flex-direction:column; min-height:0;
   }
 
-  header{padding:1.6rem 1.2rem 1rem;text-align:center;}
-  .kicker{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.28em;text-transform:uppercase;color:var(--cyan);}
-  h1{font-family:var(--font-mono);font-weight:700;font-size:clamp(1.6rem,4vw,2.3rem);margin:.4rem 0 .3rem;color:#fff;letter-spacing:.02em;}
-  header p{color:var(--ink-dim);font-size:.86rem;max-width:56ch;margin:0 auto;line-height:1.6;}
-  header p b{color:var(--cyan-bright);font-weight:600;}
-
-  .app{max-width:1400px;margin:0 auto;padding:1rem 1rem 3rem;display:grid;grid-template-columns:220px minmax(0,1fr) 300px;gap:1rem;align-items:start;}
-  @media (max-width:1180px){ .app{grid-template-columns:200px minmax(0,1fr);} .previewCol{grid-column:1/-1;order:3;} }
-  @media (max-width:760px){ .app{grid-template-columns:1fr;} .toolCol{order:1;} .canvasCol{order:2;} .previewCol{order:3;grid-column:1;} }
-
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;}
-  .panel-title{
-    font-family:var(--font-mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);
-    padding:.6rem .8rem;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;
+  /* ---- menu bar ---- */
+  .menubar{
+    display:flex; flex-shrink:0; background:var(--panel-alt); border-bottom:1px solid var(--border);
+    padding:0 .3rem;
   }
-  .panel-body{padding:.8rem;}
-  .panel + .panel{margin-top:.9rem;}
+  .menu{position:relative;}
+  .menu-trigger{
+    background:transparent;border:none;color:var(--text-muted);padding:.42rem .75rem;
+    font-size:.74rem;cursor:pointer;font-family:inherit;
+  }
+  .menu-trigger:hover, .menu.is-open .menu-trigger{background:var(--border);color:var(--text);}
+  .menu-dropdown{
+    display:none;position:absolute;top:100%;left:0;background:var(--panel);border:1px solid var(--border-strong);
+    min-width:210px;z-index:80;box-shadow:0 12px 28px rgba(0,0,0,.55);flex-direction:column;padding:.3rem;
+  }
+  .menu.is-open .menu-dropdown{display:flex;}
+  .menu-dropdown button{
+    background:transparent;border:none;color:var(--text);text-align:left;padding:.5rem .6rem;font-size:.78rem;
+    cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:1rem;border-radius:2px;
+    font-family:inherit;width:100%;
+  }
+  .menu-dropdown button:hover{background:rgba(204,255,0,.1);color:var(--accent);}
+  .menu-dropdown kbd{background:var(--panel-alt);border:1px solid var(--border);border-radius:3px;padding:.05em .4em;font-size:.68rem;}
+  .menu-info{padding:.5rem .6rem;font-size:.7rem;color:var(--text-muted);line-height:1.55;max-width:260px;}
+  .menu-divider{border:none;border-top:1px solid var(--border);margin:.25rem 0;}
 
-  /* ---- toolbar ---- */
-  .tool-grid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem;}
+  /* ---- titlebar ---- */
+  .titlebar{
+    display:flex; align-items:center; justify-content:space-between; gap:.6rem; flex-shrink:0;
+    padding:.45rem .7rem; border-bottom:1px solid var(--border); background:var(--bg);
+  }
+  .titlebar-id{display:flex; align-items:baseline; gap:.5rem; min-width:0;}
+  .titlebar .kicker{font-size:.6rem;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);white-space:nowrap;}
+  .titlebar h1{font-size:1rem;margin:0;letter-spacing:.02em;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .titlebar-actions{display:flex;align-items:center;gap:.35rem;flex-shrink:0;}
+  .icon-btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:.4rem;background:transparent;border:1px solid var(--border);
+    color:var(--text-muted);cursor:pointer;border-radius:3px;font-family:inherit;font-size:.7rem;
+    min-width:36px;min-height:36px;padding:.3rem .5rem;text-decoration:none;
+  }
+  .icon-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .icon-btn .ic{font-size:1rem;line-height:1;}
+  #panelsToggleBtn{display:none;}
+
+  /* ---- workspace: the three-pane app body ---- */
+  .workspace{display:flex;flex:1;min-height:0;position:relative;}
+
+  /* ---- left toolbox — icon-only vertical strip, always visible, the
+     "grab a tool" muscle-memory column every image editor has. ---- */
+  .toolbox{
+    width:56px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;align-items:center;gap:.35rem;padding:.5rem .35rem;
+    overflow-y:auto;
+  }
+  .toolbox-divider{width:70%;height:1px;background:var(--border);margin:.3rem 0;flex-shrink:0;}
   .tool-btn{
-    background:var(--blueprint-2);border:1px solid var(--line);color:var(--ink);padding:.5rem .4rem;
-    font-size:.72rem;cursor:pointer;border-radius:3px;display:flex;flex-direction:column;align-items:center;gap:.2rem;
+    width:44px;height:40px;background:var(--panel-alt);border:1px solid var(--border);color:var(--text);
+    cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;
+    font-size:1.05rem;flex-shrink:0;position:relative;
   }
-  .tool-btn .ic{font-size:1.05rem;}
-  .tool-btn:hover{border-color:var(--cyan);}
-  .tool-btn.is-on{background:var(--cyan);border-color:var(--cyan);color:var(--blueprint);font-weight:600;}
-  .tool-row{display:flex;gap:.4rem;margin-top:.5rem;}
-  .tool-row .tool-btn{flex:1;}
-
-  .zoom-row{display:flex;gap:.3rem;margin-top:.6rem;}
-  .zoom-row button{
-    flex:1;background:var(--blueprint-2);border:1px solid var(--line);color:var(--ink-dim);padding:.35rem;
-    font-family:var(--font-mono);font-size:.7rem;cursor:pointer;
+  .tool-btn .ic{pointer-events:none;}
+  .tool-btn:hover{border-color:var(--accent);}
+  .tool-btn.is-on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);}
+  .tool-btn .badge{position:absolute;bottom:1px;right:3px;font-size:.5rem;font-weight:700;color:var(--accent);pointer-events:none;}
+  .tool-btn.is-on .badge{color:var(--accent-ink);}
+  .zoom-mini{display:grid;grid-template-columns:1fr 1fr;gap:.3rem;width:44px;}
+  .zoom-mini button{
+    background:var(--panel-alt);border:1px solid var(--border);color:var(--text-muted);border-radius:3px;
+    font-size:.6rem;padding:.35rem 0;cursor:pointer;min-height:26px;
   }
-  .zoom-row button.is-on{border-color:var(--amber);color:var(--amber);}
+  .zoom-mini button.is-on{border-color:var(--border-strong);color:var(--accent);background:rgba(204,255,0,.08);}
 
-  .mirror-toggle{display:flex;align-items:center;gap:.5rem;font-size:.76rem;color:var(--ink-dim);cursor:pointer;margin-top:.6rem;}
-  .mirror-toggle input{accent-color:var(--cyan);}
-
-  /* ---- role palette ---- */
-  .role-cat{font-family:var(--font-mono);font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-dim);margin:.7rem 0 .35rem;}
-  .role-cat:first-child{margin-top:0;}
-  .role-swatch{
-    display:flex;align-items:center;gap:.5rem;width:100%;background:transparent;border:1px solid transparent;
-    padding:.32rem .4rem;cursor:pointer;border-radius:3px;color:var(--ink);font-size:.78rem;text-align:left;
+  /* ---- center: canvas sub-toolbar + viewport ---- */
+  .canvas-col{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;}
+  .canvas-toolbar{
+    display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.45rem .7rem;
+    border-bottom:1px solid var(--border);background:var(--panel-alt);flex-shrink:0;
   }
-  .role-swatch:hover{background:var(--blueprint-2);}
-  .role-swatch.is-on{background:var(--blueprint-2);border-color:var(--cyan);}
-  .role-chip{width:16px;height:16px;border-radius:2px;flex-shrink:0;border:1px solid rgba(255,255,255,.25);}
-
-  /* ---- canvas area ---- */
-  .canvas-toolbar{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.6rem .8rem;border-bottom:1px solid var(--line);}
-  .canvas-stats{font-family:var(--font-mono);font-size:.68rem;color:var(--ink-dim);display:flex;gap:.9rem;flex-wrap:wrap;}
-  .canvas-stats b{color:var(--cyan-bright);}
-  .canvas-scroll{overflow:auto;max-height:70vh;padding:1rem;display:flex;justify-content:center;background:repeating-conic-gradient(#0A1E3C 0% 25%, #0C2249 0% 50%) 0 0/16px 16px;}
-  #editorCanvas{display:block;image-rendering:pixelated;cursor:crosshair;touch-action:none;}
-
-  /* ---- config fields ---- */
-  .field-label{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim);display:block;margin-bottom:.35rem;}
-  .field-row{display:flex;gap:.5rem;margin-bottom:.7rem;}
-  .field-row > div{flex:1;}
-  input[type=number], input[type=text], textarea{
-    width:100%;background:var(--blueprint-2);border:1px solid var(--line);color:var(--ink);padding:.4rem .5rem;
-    font-size:.8rem;border-radius:3px;
+  .tool-options-group{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;}
+  .tool-options-group[hidden]{display:none;}
+  .brush-size-row{display:flex;gap:.3rem;flex-wrap:wrap;}
+  .select-btn-row{display:flex;gap:.3rem;flex-wrap:wrap;}
+  .select-btn-row button{
+    background:var(--panel-raised);border:1px solid var(--border);color:var(--text-muted);padding:.3rem .55rem;
+    font-size:.68rem;cursor:pointer;min-height:32px;border-radius:3px;font-family:inherit;
   }
-  input[type=number]:focus, input[type=text]:focus, textarea:focus, input[type=range]:focus{outline:2px solid var(--cyan);outline-offset:1px;}
-  textarea{resize:vertical;min-height:60px;font-family:var(--font-sans);}
-  input[type=range]{width:100%;accent-color:var(--cyan);}
-
-  .band-visual{position:relative;height:14px;background:var(--blueprint-2);border:1px solid var(--line);border-radius:3px;margin-top:.4rem;overflow:hidden;}
-  .band-visual .band-fill{position:absolute;top:0;bottom:0;background:rgba(122,215,240,.4);border-left:1px solid var(--cyan);border-right:1px solid var(--cyan);}
-
-  .checkbox-row{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--ink);margin-bottom:.7rem;cursor:pointer;}
-  .checkbox-row input{accent-color:var(--cyan);width:16px;height:16px;}
-
+  .select-btn-row button:hover{border-color:var(--accent);color:var(--accent);}
+  .brush-size-row button{
+    background:var(--panel-raised);border:1px solid var(--border);color:var(--text-muted);padding:.3rem .55rem;
+    font-size:.68rem;cursor:pointer;min-height:32px;border-radius:3px;font-family:inherit;
+  }
+  .brush-size-row button.is-on{border-color:var(--border-strong);color:var(--accent);background:rgba(204,255,0,.08);}
+  .toolbar-spacer{flex:1;min-width:.4rem;}
   .btn{
-    width:100%;background:var(--cyan);color:var(--blueprint);border:none;padding:.6rem;font-family:var(--font-mono);
-    font-weight:700;font-size:.76rem;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;border-radius:3px;margin-top:.4rem;
+    background:var(--accent);color:var(--accent-ink);border:none;padding:.5rem .8rem;
+    font-weight:700;font-size:.7rem;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;border-radius:3px;
+    min-height:36px;white-space:nowrap;
   }
-  .btn:hover{background:var(--cyan-bright);}
-  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink-dim);}
-  .btn.ghost:hover{border-color:var(--cyan);color:var(--cyan);}
+  .btn:hover{background:#DFFF66;}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text-muted);}
+  .btn.ghost:hover{border-color:var(--accent);color:var(--accent);}
   .btn.danger{background:transparent;border:1px solid var(--danger);color:var(--danger);}
   .btn.danger:hover{background:var(--danger);color:#fff;}
+  .btn.full{width:100%;margin-top:.5rem;padding:.65rem;min-height:44px;}
 
-  /* ---- preview grid ---- */
-  .preview-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.7rem;}
-  @media (max-width:1180px) and (min-width:761px){ .preview-grid{grid-template-columns:repeat(3,1fr);} }
-  .preview-card{background:var(--blueprint-2);border:1px solid var(--line);border-radius:4px;overflow:hidden;}
-  .preview-card .pc-title{font-family:var(--font-mono);font-size:.64rem;letter-spacing:.06em;text-transform:uppercase;color:var(--cyan);padding:.4rem .5rem;border-bottom:1px solid var(--line);}
-  .preview-card .pc-canvas-wrap{height:180px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;}
+  .canvas-viewport{
+    flex:1;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:center;padding:2.5rem;
+    background:repeating-conic-gradient(#080B07 0% 25%, #0A0D08 0% 50%) 0 0/16px 16px;
+  }
+  #editorCanvas{display:block;image-rendering:pixelated;cursor:crosshair;touch-action:none;flex-shrink:0;box-shadow:0 0 0 1px var(--border-strong);}
+
+  /* ---- right dock — tabbed, so every property panel lives in one fixed-
+     size column instead of stacking the page taller. ---- */
+  .dock{
+    width:300px;flex-shrink:0;background:var(--panel);border-left:1px solid var(--border);
+    display:flex;flex-direction:column;min-height:0;min-width:0;
+  }
+  .dock-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .dock-tabs button{
+    flex:1;background:var(--panel-alt);border:none;border-right:1px solid var(--border);color:var(--text-muted);
+    padding:.55rem .15rem;font-size:.56rem;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;font-family:inherit;
+  }
+  .dock-tabs button:last-child{border-right:none;}
+  .dock-tabs button.is-on{background:var(--panel);color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent);}
+  .dock-body{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;}
+  .dock-panel{display:none;padding:.85rem;min-width:0;}
+  .dock-panel.is-on{display:block;}
+
+  .recent-roles-row{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.5rem;}
+  .recent-roles-row button{
+    width:32px;height:32px;border-radius:4px;border:1px solid var(--border);cursor:pointer;padding:0;flex-shrink:0;
+  }
+  .recent-roles-row button.is-on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+  .role-cat{font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin:.7rem 0 .35rem;}
+  .role-cat:first-child{margin-top:0;}
+  .role-palette-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.3rem;}
+  .role-swatch{
+    display:flex;align-items:center;gap:.45rem;width:100%;min-width:0;background:var(--panel-alt);border:1px solid var(--border);
+    padding:.4rem .5rem;cursor:pointer;border-radius:3px;color:var(--text);font-size:.72rem;text-align:left;min-height:40px;
+  }
+  .role-swatch:hover{border-color:var(--border-strong);}
+  .role-swatch.is-on{border-color:var(--accent);background:rgba(204,255,0,.08);}
+  .role-chip{width:15px;height:15px;border-radius:2px;flex-shrink:0;border:1px solid rgba(255,255,255,.25);}
+  .role-swatch span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;}
+
+  .field-label{font-size:.64rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);display:flex;align-items:center;gap:.35rem;margin-bottom:.35rem;}
+  .field-row{display:flex;gap:.5rem;margin-bottom:.7rem;}
+  .field-row > div{flex:1;min-width:0;}
+  input[type=number], input[type=text], textarea{
+    width:100%;background:var(--panel-alt);border:1px solid var(--border);color:var(--text);padding:.5rem .5rem;
+    font-size:.85rem;border-radius:3px;min-height:38px;
+  }
+  input[type=number]:focus, input[type=text]:focus, textarea:focus{outline:2px solid var(--accent);outline-offset:1px;}
+  textarea{resize:vertical;min-height:60px;font-family:var(--font-mono);}
+
+  .band-visual{position:relative;height:14px;background:var(--panel-alt);border:1px solid var(--border);border-radius:3px;margin-top:.4rem;overflow:hidden;}
+  .band-visual .band-fill{position:absolute;top:0;bottom:0;background:rgba(204,255,0,.28);border-left:1px solid var(--accent);border-right:1px solid var(--accent);}
+  .section-title{font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:1.1rem 0 .5rem;display:flex;align-items:center;gap:.35rem;}
+  .section-title:first-child{margin-top:0;}
+
+  .checkbox-row{display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:var(--text);margin-bottom:.4rem;cursor:pointer;min-height:28px;}
+  .checkbox-row input{accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;}
+
+  .stat-row{display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem;font-size:.72rem;}
+  .stat-row .role-chip{width:13px;height:13px;border-radius:2px;flex-shrink:0;border:1px solid rgba(255,255,255,.25);}
+  .stat-row .stat-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+  .stat-row .stat-bar-wrap{width:70px;height:6px;background:var(--panel-alt);border-radius:3px;overflow:hidden;flex-shrink:0;}
+  .stat-row .stat-bar{height:100%;background:var(--accent);}
+  .stat-row .stat-count{width:34px;text-align:right;color:var(--text-muted);flex-shrink:0;font-variant-numeric:tabular-nums;}
+  .stat-empty{color:var(--text-faint);font-size:.72rem;}
+  .preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;}
+  .preview-card{background:var(--panel-alt);border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+  .preview-card .pc-title{font-size:.6rem;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);padding:.35rem .45rem;border-bottom:1px solid var(--border);}
+  .preview-card .pc-canvas-wrap{height:140px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;}
   .preview-card canvas{image-rendering:pixelated;}
-  .preview-card .pc-meta{font-family:var(--font-mono);font-size:.6rem;color:var(--ink-dim);padding:.35rem .5rem;border-top:1px solid var(--line);}
+  .preview-card .pc-meta{font-size:.58rem;color:var(--text-muted);padding:.3rem .45rem;border-top:1px solid var(--border);}
 
-  .hint{font-size:.72rem;color:var(--ink-dim);line-height:1.55;margin-top:.5rem;}
-  .hint b{color:var(--cyan-bright);}
+  /* ---- status bar ---- */
+  .statusbar{
+    display:flex;flex-shrink:0;gap:1rem;padding:.35rem .8rem;font-size:.66rem;color:var(--text-muted);
+    background:var(--panel-alt);border-top:1px solid var(--border);flex-wrap:wrap;
+  }
+  .statusbar b{color:var(--accent);}
+  .statusbar-spacer{flex:1;min-width:.5rem;}
 
-  kbd{background:var(--blueprint-2);border:1px solid var(--line);border-radius:3px;padding:.05em .4em;font-family:var(--font-mono);font-size:.85em;}
+  /* ---- tooltips ---- */
+  .tt{
+    display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;
+    background:var(--panel-alt);border:1px solid var(--border);color:var(--text-muted);font-size:.62rem;font-weight:700;
+    cursor:help;position:relative;flex-shrink:0;user-select:none;
+  }
+  .tt:hover, .tt:focus-visible, .tt.is-open{border-color:var(--accent);color:var(--accent);outline:none;}
+  .tt::after{
+    content:attr(data-tooltip);position:absolute;left:0;top:calc(100% + 8px);
+    width:max-content;max-width:220px;background:var(--panel);border:1px solid var(--border-strong);
+    color:var(--text);font-size:.68rem;line-height:1.5;padding:.5rem .6rem;border-radius:4px;
+    opacity:0;pointer-events:none;transition:opacity .12s;z-index:60;text-align:left;font-weight:400;
+    box-shadow:0 10px 24px rgba(0,0,0,.5);
+  }
+  .tt:hover::after, .tt:focus-visible::after, .tt.is-open::after{opacity:1;}
 
-  footer{max-width:1400px;margin:0 auto;padding:1.4rem 1.2rem 3rem;color:var(--ink-dim);font-size:.72rem;line-height:1.8;border-top:1px solid var(--line);text-align:center;}
+  /* =======================================================================
+     Mobile — the right dock becomes a slide-in sheet (Photoshop/Procreate-
+     style "panels" drawer) instead of a fixed 300px column, since a 56px
+     toolbox + 300px dock leaves almost nothing for the canvas on a phone.
+     The toolbox stays put: it's the one thing you reach for constantly.
+     ======================================================================= */
+  .dock-backdrop{display:none;}
+  @media (max-width:860px){
+    #panelsToggleBtn{display:inline-flex;}
+    .titlebar h1{font-size:.92rem;}
+    .toolbox{width:50px;}
+    .tool-btn{width:40px;height:38px;font-size:.95rem;}
+    .zoom-mini{width:40px;}
+    .dock{
+      position:fixed;top:0;bottom:0;right:0;width:86vw;max-width:340px;z-index:70;
+      transform:translateX(100%);transition:transform .22s ease;box-shadow:-12px 0 30px rgba(0,0,0,.5);
+    }
+    .dock.is-open{transform:translateX(0);}
+    .dock-backdrop{
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:65;
+    }
+    .dock-backdrop.is-on{display:block;}
+    .canvas-viewport{padding:1rem;}
+    .canvas-toolbar{gap:.4rem;padding:.4rem .5rem;}
+    .btn{padding:.45rem .6rem;font-size:.64rem;}
+    .statusbar{font-size:.62rem;gap:.6rem .9rem;}
+    .titlebar-actions .icon-btn span.lbl{display:none;}
+  }
+  @media (max-width:420px){
+    .preview-grid{grid-template-columns:1fr;}
+  }
 </style>
 </head>
 <body>
-<div class="bp-grid"></div>
 
-<header>
-  <span class="kicker">City of Stonks &mdash; Community Tools</span>
-  <h1>BUILDING DESIGNER</h1>
-  <p>Paint <b>roles</b>, not colors. Every cell you place is an abstract part &mdash; a window, a trim line, a rooftop object &mdash; that City of Stonks recolors per city context and stretches to fit whatever height a wallet actually needs. Design once, it adapts everywhere.</p>
-</header>
+<div class="app-shell">
 
-<div class="app">
-
-  <div class="toolCol">
-    <div class="panel">
-      <div class="panel-title"><span>Tools</span></div>
-      <div class="panel-body">
-        <div class="tool-grid">
-          <button class="tool-btn is-on" data-tool="pen"><span class="ic">&#9998;</span>Pen</button>
-          <button class="tool-btn" data-tool="line"><span class="ic">&#9585;</span>Line</button>
-          <button class="tool-btn" data-tool="rect"><span class="ic">&#9633;</span>Rect</button>
-          <button class="tool-btn" data-tool="fill"><span class="ic">&#9967;</span>Fill</button>
-          <button class="tool-btn" data-tool="eyedrop"><span class="ic">&#128167;</span>Pick</button>
-          <button class="tool-btn" data-tool="erase"><span class="ic">&#9003;</span>Erase</button>
-        </div>
-        <div class="tool-row">
-          <button class="tool-btn" id="undoBtn"><span class="ic">&#8630;</span>Undo</button>
-          <button class="tool-btn" id="redoBtn"><span class="ic">&#8631;</span>Redo</button>
-        </div>
-        <label class="mirror-toggle"><input type="checkbox" id="mirrorToggle"> Mirror (symmetric facade)</label>
-        <label class="mirror-toggle"><input type="checkbox" id="gridToggle" checked> Show grid lines</label>
-        <div class="field-label" style="margin-top:.8rem;">Zoom</div>
-        <div class="zoom-row">
-          <button data-zoom="6">6&times;</button>
-          <button data-zoom="10" class="is-on">10&times;</button>
-          <button data-zoom="16">16&times;</button>
-          <button data-zoom="24">24&times;</button>
-        </div>
-        <div class="hint"><b>Shortcuts:</b> <kbd>B</kbd> pen &middot; <kbd>L</kbd> line &middot; <kbd>R</kbd> rect &middot; <kbd>F</kbd> fill &middot; <kbd>I</kbd> pick &middot; <kbd>E</kbd> erase &middot; <kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd> undo/redo</div>
+  <nav class="menubar" id="menubar">
+    <div class="menu" data-menu="file">
+      <button class="menu-trigger" type="button">File</button>
+      <div class="menu-dropdown">
+        <button type="button" data-action="import">Import .json&hellip;</button>
+        <button type="button" data-action="exportJson">Export .json</button>
+        <button type="button" data-action="exportPng">Export .png</button>
       </div>
     </div>
-
-    <div class="panel">
-      <div class="panel-title"><span>Role Palette</span></div>
-      <div class="panel-body" id="rolePalette"></div>
+    <div class="menu" data-menu="edit">
+      <button class="menu-trigger" type="button">Edit</button>
+      <div class="menu-dropdown">
+        <button type="button" data-action="undo">Undo <kbd>Ctrl+Z</kbd></button>
+        <button type="button" data-action="redo">Redo <kbd>Ctrl+Y</kbd></button>
+        <hr class="menu-divider">
+        <button type="button" data-action="copy">Copy <kbd>Ctrl+C</kbd></button>
+        <button type="button" data-action="cut">Cut <kbd>Ctrl+X</kbd></button>
+        <button type="button" data-action="paste">Paste <kbd>Ctrl+V</kbd></button>
+        <button type="button" data-action="deleteSel">Delete Selection <kbd>Del</kbd></button>
+        <button type="button" data-action="deselect">Deselect <kbd>Esc</kbd></button>
+        <hr class="menu-divider">
+        <button type="button" data-action="flipH">Flip Horizontal</button>
+        <button type="button" data-action="flipV">Flip Vertical</button>
+        <hr class="menu-divider">
+        <button type="button" data-action="random">Random Building</button>
+        <button type="button" data-action="clear">Clear Canvas</button>
+      </div>
     </div>
-  </div>
+    <div class="menu" data-menu="view">
+      <button class="menu-trigger" type="button">View</button>
+      <div class="menu-dropdown">
+        <button type="button" data-action="zoom6">Zoom 6&times;</button>
+        <button type="button" data-action="zoom10">Zoom 10&times;</button>
+        <button type="button" data-action="zoom16">Zoom 16&times;</button>
+        <button type="button" data-action="zoom24">Zoom 24&times;</button>
+        <hr class="menu-divider">
+        <button type="button" data-action="toggleGrid">Toggle Grid Lines</button>
+        <button type="button" data-action="cycleSymmetry">Cycle Symmetry Mode</button>
+        <hr class="menu-divider">
+        <button type="button" data-action="togglePanels">Toggle Panels (mobile)</button>
+      </div>
+    </div>
+    <div class="menu" data-menu="help">
+      <button class="menu-trigger" type="button">Help</button>
+      <div class="menu-dropdown">
+        <div class="menu-info"><b style="color:var(--text);">Shortcuts</b><br>B pen &middot; L line &middot; R rect &middot; O ellipse &middot; F fill &middot; I pick &middot; E erase &middot; S select<br>[ / ] brush size &middot; Ctrl+Z / Ctrl+Y undo / redo<br>Ctrl+C / X / V copy / cut / paste &middot; Del clear selection &middot; Esc deselect &middot; arrows nudge selection</div>
+        <hr class="menu-divider">
+        <div class="menu-info">Paint roles, not colors — every cell you place is an abstract building part that City of Stonks recolors per city context and stretches to fit whatever height a wallet needs.</div>
+      </div>
+    </div>
+  </nav>
 
-  <div class="canvasCol">
-    <div class="panel">
+  <header class="titlebar">
+    <div class="titlebar-id">
+      <span class="kicker">City of Stonks</span>
+      <h1>Building Designer</h1>
+    </div>
+    <div class="titlebar-actions">
+      <a class="icon-btn" href="https://city-of-stonks.github.io/testing/" title="Control Room — view all repos &amp; pages"><span class="ic">&#9635;</span><span class="lbl">Dashboard</span></a>
+      <label class="icon-btn" title="Import .json"><span class="ic">&uarr;</span><span class="lbl">Import</span><input type="file" id="importInput" accept="application/json,.json" hidden></label>
+      <button class="icon-btn" id="exportJsonBtn" title="Export .json"><span class="ic">&darr;</span><span class="lbl">.json</span></button>
+      <button class="icon-btn" id="exportPngBtn" title="Export .png"><span class="ic">&darr;</span><span class="lbl">.png</span></button>
+      <button class="icon-btn" id="panelsToggleBtn" title="Toggle panels"><span class="ic">&#9776;</span><span class="lbl">Panels</span></button>
+    </div>
+  </header>
+
+  <div class="workspace">
+
+    <aside class="toolbox" id="toolbox">
+      <button class="tool-btn is-on" data-tool="pen" title="Pen (B)"><span class="ic">&#9998;</span></button>
+      <button class="tool-btn" data-tool="line" title="Line (L)"><span class="ic">&#9585;</span></button>
+      <button class="tool-btn" data-tool="rect" title="Rectangle (R)"><span class="ic">&#9633;</span></button>
+      <button class="tool-btn" data-tool="ellipse" title="Ellipse (O)"><span class="ic">&#9711;</span></button>
+      <button class="tool-btn" data-tool="fill" title="Fill (F)"><span class="ic">&#9967;</span></button>
+      <button class="tool-btn" data-tool="eyedrop" title="Eyedropper (I)"><span class="ic">&#128167;</span></button>
+      <button class="tool-btn" data-tool="erase" title="Eraser (E)"><span class="ic">&#9003;</span></button>
+      <button class="tool-btn" data-tool="select" title="Select (S)"><span class="ic">&#9634;</span></button>
+      <div class="toolbox-divider"></div>
+      <button class="tool-btn" id="undoBtn" title="Undo (Ctrl+Z)"><span class="ic">&#8630;</span></button>
+      <button class="tool-btn" id="redoBtn" title="Redo (Ctrl+Y)"><span class="ic">&#8631;</span></button>
+      <div class="toolbox-divider"></div>
+      <button class="tool-btn" id="symmetryBtn" title="Symmetry mode — click to cycle Off / Horizontal / Vertical / 4-way"><span class="ic">&#8646;</span><span class="badge" id="symmetryBadge"></span></button>
+      <label class="tool-btn is-on" title="Show grid lines"><input type="checkbox" id="gridToggle" checked hidden><span class="ic">&#9638;</span></label>
+      <div class="toolbox-divider"></div>
+      <div class="zoom-mini">
+        <button data-zoom="6">6&times;</button>
+        <button data-zoom="10" class="is-on">10&times;</button>
+        <button data-zoom="16">16&times;</button>
+        <button data-zoom="24">24&times;</button>
+      </div>
+    </aside>
+
+    <div class="canvas-col">
       <div class="canvas-toolbar">
-        <div class="canvas-stats">
-          <span>X <b id="statX">&mdash;</b></span>
-          <span>Y <b id="statY">&mdash;</b></span>
-          <span>Size <b id="statSize">&mdash;</b></span>
-          <span>Painted <b id="statPainted">0</b></span>
+        <div class="tool-options-group" id="brushOptionsGroup">
+          <span class="field-label" style="margin:0;">Brush<span class="tt" tabindex="0" data-tooltip="Applies to Pen and Erase — paints a size×size (or round) block centered on the cursor.">?</span></span>
+          <div class="brush-size-row">
+            <button data-brush="1" class="is-on">1px</button>
+            <button data-brush="2">2px</button>
+            <button data-brush="3">3px</button>
+            <button data-brush="4">4px</button>
+            <button data-brush="6">6px</button>
+            <button data-brush="8">8px</button>
+          </div>
+          <button class="icon-btn" id="brushShapeBtn" title="Toggle brush shape">&#9632; Square</button>
         </div>
-        <div style="display:flex;gap:.5rem;">
-          <button class="btn ghost" id="clearBtn" style="width:auto;margin:0;padding:.4rem .8rem;">Clear</button>
+        <div class="tool-options-group" id="selectOptionsGroup" hidden>
+          <span class="field-label" style="margin:0;">Selection</span>
+          <div class="select-btn-row">
+            <button id="copyBtn" title="Copy (Ctrl+C)">Copy</button>
+            <button id="cutBtn" title="Cut (Ctrl+X)">Cut</button>
+            <button id="pasteBtn" title="Paste (Ctrl+V)">Paste</button>
+            <button id="deleteSelBtn" title="Delete (Del)">Delete</button>
+            <button id="deselectBtn" title="Deselect (Esc)">Deselect</button>
+          </div>
+          <span class="field-label" style="margin:0;color:var(--text-faint);">Arrow keys nudge</span>
         </div>
+        <div class="toolbar-spacer"></div>
+        <button class="btn" id="randomBtn" style="background:var(--border-strong);color:#0B1400;">&#127922; Random Building</button>
+        <button class="btn ghost" id="clearBtn">Clear</button>
       </div>
-      <div class="canvas-scroll">
+      <div class="canvas-viewport" id="canvasViewport">
         <canvas id="editorCanvas" width="300" height="510"></canvas>
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-title"><span>Canvas Dimensions</span></div>
-      <div class="panel-body">
-        <div class="field-row">
-          <div><span class="field-label">Width (cells)</span><input type="number" id="gridWIn" min="20" max="50" value="30"></div>
-          <div><span class="field-label">Height (cells)</span><input type="number" id="gridHIn" min="34" max="127" value="34"></div>
-        </div>
-        <button class="btn ghost" id="resizeBtn">Apply Resize</button>
-        <p class="hint">Resizing keeps whatever's already painted, anchored to the top-left corner.</p>
+    <div class="dock-backdrop" id="dockBackdrop"></div>
+    <aside class="dock" id="dockRight">
+      <div class="dock-tabs">
+        <button type="button" class="is-on" data-tab="roles">Roles</button>
+        <button type="button" data-tab="canvas">Canvas</button>
+        <button type="button" data-tab="preview">Preview</button>
+        <button type="button" data-tab="stats">Stats</button>
+        <button type="button" data-tab="info">Info</button>
       </div>
-    </div>
+      <div class="dock-body">
 
-    <div class="panel">
-      <div class="panel-title"><span>Repeating Floors</span></div>
-      <div class="panel-body">
-        <p class="hint" style="margin-top:0;">Rows <b>above</b> the band render once as the roofline cap. Rows <b>inside</b> the band repeat to fill whatever height a building needs. Rows <b>below</b> render once as the ground floor.</p>
-        <div class="field-row">
-          <div><span class="field-label">Cap ends (row)</span><input type="number" id="bandStartIn" min="0" value="4"></div>
-          <div><span class="field-label">Base starts (row)</span><input type="number" id="bandEndIn" min="1" value="30"></div>
+        <div class="dock-panel is-on" data-tab-panel="roles">
+          <div class="section-title" id="recentRolesTitle" style="display:none;">Recently Used</div>
+          <div class="recent-roles-row" id="recentRolesRow"></div>
+          <div id="rolePalette"></div>
         </div>
-        <div class="band-visual" id="bandVisual"><div class="band-fill" id="bandFill"></div></div>
-        <div class="field-row" style="margin-top:.8rem;">
-          <div><span class="field-label">Max height (rows, optional)</span><input type="number" id="maxHeightIn" min="0" placeholder="unlimited"></div>
-        </div>
-        <label class="checkbox-row"><input type="checkbox" id="landmarkToggle"> One-off landmark (never repeats site-wide)</label>
-      </div>
-    </div>
 
-    <div class="panel">
-      <div class="panel-title"><span>Submission Details</span></div>
-      <div class="panel-body">
-        <span class="field-label">Building name</span>
-        <input type="text" id="nameIn" placeholder="e.g. Ledger Tower" style="margin-bottom:.7rem;">
-        <span class="field-label">Credit</span>
-        <input type="text" id="creditIn" placeholder="your name or handle" style="margin-bottom:.7rem;">
-        <span class="field-label">Notes for reviewers</span>
-        <textarea id="notesIn" placeholder="anything a human reviewer should know"></textarea>
-        <button class="btn" id="exportJsonBtn">&darr; Export Building (.json)</button>
-        <button class="btn ghost" id="exportPngBtn">&darr; Export Sprite (.png)</button>
-        <p class="hint">This is a local design tool — exporting saves files to your computer. It doesn't submit anywhere; send the exported files to however City of Stonks actually collects submissions.</p>
+        <div class="dock-panel" data-tab-panel="canvas">
+          <div class="section-title">Canvas Dimensions <span class="tt" tabindex="0" data-tooltip="Resizing keeps whatever's already painted, anchored to the top-left corner.">?</span></div>
+          <div class="field-row">
+            <div><span class="field-label">Width (cells)</span><input type="number" id="gridWIn" min="20" max="50" value="30"></div>
+            <div><span class="field-label">Height (cells)</span><input type="number" id="gridHIn" min="34" max="127" value="34"></div>
+          </div>
+          <button class="btn ghost full" id="resizeBtn">Apply Resize</button>
+
+          <div class="section-title">Transform</div>
+          <div class="field-row">
+            <button class="btn ghost" id="flipHBtn" style="flex:1;">&#8646; Flip H</button>
+            <button class="btn ghost" id="flipVBtn" style="flex:1;">&#8645; Flip V</button>
+          </div>
+
+          <div class="section-title">Repeating Floors <span class="tt" tabindex="0" data-tooltip="Rows above the band render once as the roofline cap. Rows inside the band repeat to fill whatever height a building needs. Rows below render once as the ground floor.">?</span></div>
+          <div class="field-row">
+            <div><span class="field-label">Cap ends (row)</span><input type="number" id="bandStartIn" min="0" value="4"></div>
+            <div><span class="field-label">Base starts (row)</span><input type="number" id="bandEndIn" min="1" value="30"></div>
+          </div>
+          <div class="band-visual" id="bandVisual"><div class="band-fill" id="bandFill"></div></div>
+          <div class="field-row" style="margin-top:.8rem;">
+            <div><span class="field-label">Max height (rows, optional)</span><input type="number" id="maxHeightIn" min="0" placeholder="unlimited"></div>
+          </div>
+          <label class="checkbox-row"><input type="checkbox" id="landmarkToggle"> One-off landmark (never repeats site-wide)</label>
+        </div>
+
+        <div class="dock-panel" data-tab-panel="preview">
+          <div class="section-title">Live Context Preview <span class="tt" tabindex="0" data-tooltip="The exact same role-map, recolored and restretched per context — this is what &quot;paint roles, not colors&quot; actually buys you.">?</span></div>
+          <div class="preview-grid" id="previewGrid"></div>
+        </div>
+
+        <div class="dock-panel" data-tab-panel="stats">
+          <div class="section-title">Role Usage <span class="tt" tabindex="0" data-tooltip="How many painted cells use each role, most-used first — handy for spotting a role you forgot to vary.">?</span></div>
+          <div id="statsList"></div>
+        </div>
+
+        <div class="dock-panel" data-tab-panel="info">
+          <div class="section-title">Submission Details <span class="tt" tabindex="0" data-tooltip="This is a local design tool — Export saves files to your computer, it doesn't submit anywhere. Send the exported .json to however City of Stonks actually collects submissions.">?</span></div>
+          <span class="field-label">Building name</span>
+          <input type="text" id="nameIn" placeholder="e.g. Ledger Tower" style="margin-bottom:.7rem;">
+          <span class="field-label">Credit</span>
+          <input type="text" id="creditIn" placeholder="your name or handle" style="margin-bottom:.7rem;">
+          <span class="field-label">Notes for reviewers</span>
+          <textarea id="notesIn" placeholder="anything a human reviewer should know"></textarea>
+        </div>
+
       </div>
-    </div>
+    </aside>
+
   </div>
 
-  <div class="previewCol">
-    <div class="panel">
-      <div class="panel-title"><span>Live Context Preview</span></div>
-      <div class="panel-body">
-        <p class="hint" style="margin-top:0;">The exact same role-map, recolored and restretched per context — this is what "paint roles, not colors" actually buys you.</p>
-        <div class="preview-grid" id="previewGrid"></div>
-      </div>
-    </div>
+  <div class="statusbar">
+    <span>X <b id="statX">&mdash;</b></span>
+    <span>Y <b id="statY">&mdash;</b></span>
+    <span>Size <b id="statSize">&mdash;</b></span>
+    <span>Painted <b id="statPainted">0</b></span>
+    <span>Sel <b id="statSel">&mdash;</b></span>
+    <span class="statusbar-spacer"></span>
+    <span>Tool <b id="statTool">Pen</b></span>
+    <span>Zoom <b id="statZoom">10&times;</b></span>
   </div>
 
 </div>
-
-<footer>
-  Runs entirely in your browser — nothing you draw here is uploaded anywhere. Independent fan-made tool, not officially affiliated with cityofstonks.com.
-</footer>
 
 <script>
 /* =========================================================================
@@ -263,20 +492,50 @@
    it's rendered.
    ========================================================================= */
 const ROLES = [
-  { id: 'wallBase',    label: 'Wall — Base',       cat: 'Structure', h: 214, s: 22, l: 34 },
-  { id: 'wallShadow',  label: 'Wall — Shadow',     cat: 'Structure', h: 214, s: 26, l: 20 },
-  { id: 'wallHi',      label: 'Wall — Highlight',  cat: 'Structure', h: 210, s: 20, l: 52 },
-  { id: 'frame',       label: 'Structural Frame',  cat: 'Structure', h: 220, s: 10, l: 62 },
-  { id: 'windowLit',   label: 'Window — Lit',      cat: 'Glass',     h: 45,  s: 82, l: 68 },
-  { id: 'windowDark',  label: 'Window — Dark',     cat: 'Glass',     h: 214, s: 30, l: 14 },
-  { id: 'windowGlass', label: 'Window — Glass',    cat: 'Glass',     h: 198, s: 45, l: 55 },
-  { id: 'trim',        label: 'Trim / Cornice',    cat: 'Detail',    h: 40,  s: 30, l: 72 },
-  { id: 'roofline',    label: 'Roofline',          cat: 'Detail',    h: 214, s: 25, l: 12 },
-  { id: 'door',        label: 'Door / Entrance',   cat: 'Detail',    h: 20,  s: 40, l: 30 },
-  { id: 'accent',      label: 'Accent / Sign',     cat: 'Detail',    h: 330, s: 85, l: 62 },
-  { id: 'balcony',     label: 'Balcony / Ledge',   cat: 'Detail',    h: 214, s: 18, l: 44 },
-  { id: 'rooftopObj',  label: 'Rooftop Object',    cat: 'Special',   h: 0,   s: 0,  l: 40 },
-  { id: 'ground',      label: 'Ground Detail',     cat: 'Special',   h: 30,  s: 15, l: 24 },
+  { id: 'wallBase',      label: 'Wall — Base',        cat: 'Structure', h: 214, s: 22, l: 34 },
+  { id: 'wallShadow',    label: 'Wall — Shadow',      cat: 'Structure', h: 214, s: 26, l: 20 },
+  { id: 'wallHi',        label: 'Wall — Highlight',   cat: 'Structure', h: 210, s: 20, l: 52 },
+  { id: 'frame',         label: 'Structural Frame',   cat: 'Structure', h: 220, s: 10, l: 62 },
+  { id: 'brick',         label: 'Brick Cladding',     cat: 'Structure', h: 10,  s: 45, l: 38 },
+  { id: 'metalPanel',    label: 'Metal Panel',        cat: 'Structure', h: 205, s: 8,  l: 58 },
+
+  { id: 'windowLit',     label: 'Window — Lit',       cat: 'Glass',     h: 45,  s: 82, l: 68 },
+  { id: 'windowDark',    label: 'Window — Dark',      cat: 'Glass',     h: 214, s: 30, l: 14 },
+  { id: 'windowGlass',   label: 'Window — Glass',     cat: 'Glass',     h: 198, s: 45, l: 55 },
+  { id: 'skylight',      label: 'Skylight',           cat: 'Glass',     h: 195, s: 55, l: 72 },
+
+  { id: 'trim',          label: 'Trim / Cornice',     cat: 'Detail',    h: 40,  s: 30, l: 72 },
+  { id: 'roofline',      label: 'Roofline',           cat: 'Detail',    h: 214, s: 25, l: 12 },
+  { id: 'door',          label: 'Door / Entrance',    cat: 'Detail',    h: 20,  s: 40, l: 30 },
+  { id: 'accent',        label: 'Accent / Sign',      cat: 'Detail',    h: 330, s: 85, l: 62 },
+  { id: 'balcony',       label: 'Balcony / Ledge',    cat: 'Detail',    h: 214, s: 18, l: 44 },
+  { id: 'awning',        label: 'Awning / Canopy',    cat: 'Detail',    h: 355, s: 55, l: 45 },
+
+  { id: 'billboard',     label: 'Billboard Panel',    cat: 'Signage',   h: 0,   s: 0,  l: 88 },
+  { id: 'neonSign',      label: 'Neon Sign',          cat: 'Signage',   h: 185, s: 95, l: 60 },
+  { id: 'flag',          label: 'Flag / Pennant',     cat: 'Signage',   h: 0,   s: 70, l: 50 },
+  { id: 'banner',        label: 'Banner',             cat: 'Signage',   h: 50,  s: 80, l: 55 },
+
+  { id: 'ivy',           label: 'Ivy / Vines',        cat: 'Greenery',  h: 100, s: 45, l: 28 },
+  { id: 'rooftopGarden', label: 'Rooftop Garden',     cat: 'Greenery',  h: 95,  s: 40, l: 35 },
+  { id: 'tree',          label: 'Tree / Foliage',     cat: 'Greenery',  h: 110, s: 35, l: 30 },
+  { id: 'moss',          label: 'Moss / Lichen',      cat: 'Greenery',  h: 90,  s: 30, l: 30 },
+
+  { id: 'rust',          label: 'Rust Stain',         cat: 'Weathering',h: 25,  s: 55, l: 35 },
+  { id: 'crack',         label: 'Crack / Fissure',    cat: 'Weathering',h: 0,   s: 0,  l: 8  },
+  { id: 'graffiti',      label: 'Graffiti Tag',       cat: 'Weathering',h: 280, s: 70, l: 55 },
+  { id: 'soot',          label: 'Soot / Scorch',      cat: 'Weathering',h: 0,   s: 0,  l: 15 },
+
+  { id: 'rooftopObj',    label: 'Rooftop Object',     cat: 'Rooftop',   h: 0,   s: 0,  l: 40 },
+  { id: 'antenna',       label: 'Antenna / Mast',     cat: 'Rooftop',   h: 0,   s: 0,  l: 55 },
+  { id: 'satelliteDish', label: 'Satellite Dish',     cat: 'Rooftop',   h: 0,   s: 0,  l: 75 },
+  { id: 'solarPanel',    label: 'Solar Panel',        cat: 'Rooftop',   h: 230, s: 60, l: 20 },
+  { id: 'waterTower',    label: 'Water Tower',        cat: 'Rooftop',   h: 25,  s: 30, l: 45 },
+  { id: 'chimney',       label: 'Chimney / Flue',     cat: 'Rooftop',   h: 15,  s: 25, l: 25 },
+
+  { id: 'ground',        label: 'Ground Detail',      cat: 'Special',   h: 30,  s: 15, l: 24 },
+  { id: 'scaffold',      label: 'Scaffolding',        cat: 'Special',   h: 45,  s: 15, l: 55 },
+  { id: 'acUnit',        label: 'AC Unit',            cat: 'Special',   h: 200, s: 10, l: 60 },
 ];
 const ROLE_BY_ID = Object.fromEntries(ROLES.map((r) => [r.id, r]));
 
@@ -322,6 +581,54 @@ const CONTEXTS = [
     hueShift: 70, satMult: 0.7, lightMult: 0.82,
     overrides: { windowLit: 'hsl(80, 40%, 55%)', accent: 'hsl(90, 60%, 55%)' },
   },
+  {
+    id: 'cyberpunk', label: 'Cyberpunk Sprawl', heightMul: 2.0,
+    sky: ['#0A0518', '#1F0A38', '#3D0F4A'],
+    hueShift: -50, satMult: 1.4, lightMult: 0.6,
+    overrides: { windowLit: 'hsl(320, 100%, 65%)', neonSign: 'hsl(185, 100%, 62%)', accent: 'hsl(300, 100%, 60%)', billboard: 'hsl(200, 90%, 55%)' },
+  },
+  {
+    id: 'blizzard', label: 'Blizzard', heightMul: 0.9,
+    sky: ['#DCE6ED', '#B9C9D6', '#8FA3B3'],
+    hueShift: -10, satMult: 0.3, lightMult: 1.2,
+    overrides: { windowLit: 'hsl(200, 20%, 60%)', ivy: 'hsl(200, 10%, 75%)', moss: 'hsl(200, 8%, 78%)' },
+  },
+  {
+    id: 'wildfire', label: 'Wildfire Haze', heightMul: 1.1,
+    sky: ['#4A1A0A', '#8A3A12', '#C4661F'],
+    hueShift: 20, satMult: 1.2, lightMult: 0.85,
+    overrides: { windowLit: 'hsl(20, 95%, 55%)', roofline: 'hsl(15, 40%, 10%)', soot: 'hsl(15, 30%, 8%)' },
+  },
+  {
+    id: 'aurora', label: 'Aurora Skyline', heightMul: 1.5,
+    sky: ['#050F1C', '#0A2E2A', '#123D4A'],
+    hueShift: 40, satMult: 1.1, lightMult: 0.7,
+    overrides: { accent: 'hsl(160, 90%, 60%)', neonSign: 'hsl(280, 80%, 65%)', windowLit: 'hsl(170, 70%, 55%)' },
+  },
+  {
+    id: 'blackout', label: 'Blackout', heightMul: 1.0,
+    sky: ['#020202', '#080808', '#101010'],
+    hueShift: 0, satMult: 0.2, lightMult: 0.35,
+    overrides: { windowLit: 'hsl(214, 20%, 10%)', windowGlass: 'hsl(214, 15%, 8%)', neonSign: 'hsl(0, 60%, 30%)' },
+  },
+  {
+    id: 'festival', label: 'Festival Night', heightMul: 1.2,
+    sky: ['#160A2E', '#3A164A', '#6A2A5C'],
+    hueShift: 10, satMult: 1.3, lightMult: 0.95,
+    overrides: { windowLit: 'hsl(38, 95%, 62%)', accent: 'hsl(340, 90%, 62%)', banner: 'hsl(45, 90%, 58%)', flag: 'hsl(200, 85%, 55%)' },
+  },
+  {
+    id: 'desertHeat', label: 'Desert Heat', heightMul: 0.85,
+    sky: ['#F5E3C2', '#EBC38F', '#D99A5B'],
+    hueShift: -15, satMult: 0.8, lightMult: 1.15,
+    overrides: { trim: 'hsl(35, 40%, 68%)', wallBase: 'hsl(30, 30%, 55%)', ivy: 'hsl(60, 25%, 35%)' },
+  },
+  {
+    id: 'corporate', label: 'Corporate District', heightMul: 1.6,
+    sky: ['#CFE0EE', '#A7C1D9', '#7E9FC0'],
+    hueShift: -8, satMult: 0.6, lightMult: 1.0,
+    overrides: { windowGlass: 'hsl(205, 55%, 60%)', accent: 'hsl(210, 60%, 45%)', billboard: 'hsl(210, 15%, 92%)' },
+  },
 ];
 
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -349,8 +656,23 @@ let activeRole = ROLES[0].id;
 let activeTool = 'pen';
 let zoom = 10;
 let showGrid = true;
-let mirrorOn = false;
 let bandStart = 4, bandEnd = 30;
+
+// Symmetry — 'off' | 'horizontal' | 'vertical' | 'both'. 'both' mirrors
+// through both axes at once (4-way point symmetry about the canvas
+// center), which stays well-defined for any W×H — a true 90°-rotational
+// symmetry only makes sense on a square grid, so it's left out.
+let symmetryMode = 'off';
+const SYMMETRY_MODES = ['off', 'horizontal', 'vertical', 'both'];
+const SYMMETRY_LABEL = { off: 'Off', horizontal: 'H', vertical: 'V', both: '4-way' };
+
+let brushShape = 'square'; // 'square' | 'round'
+
+// Rectangular marquee selection + a one-slot clipboard, for Copy/Cut/Paste
+// and arrow-key nudging a block of painted cells around.
+let selection = null; // {x0,y0,x1,y1} normalized, inclusive
+let clipboard = null; // {w,h,cells}
+let recentRoles = [];
 
 let undoStack = [];
 let redoStack = [];
@@ -367,7 +689,7 @@ function inBounds(x, y) { return x >= 0 && x < gridW && y >= 0 && y < gridH; }
    ========================================================================= */
 function pushHistory() {
   undoStack.push(grid.slice());
-  if (undoStack.length > 60) undoStack.shift();
+  if (undoStack.length > 200) undoStack.shift();
   redoStack = [];
 }
 function undo() {
@@ -383,16 +705,60 @@ function redo() {
   renderAll();
 }
 
+function trackRecentRole(roleId) {
+  recentRoles = [roleId, ...recentRoles.filter((r) => r !== roleId)].slice(0, 8);
+  renderRecentRoles();
+}
+
 /* =========================================================================
    Drawing primitives — operate on the grid array directly, mirror-aware.
    ========================================================================= */
 function setCell(x, y, roleId) {
   if (!inBounds(x, y)) return;
   grid[idx(x, y)] = roleId;
-  if (mirrorOn) {
-    const mx = gridW - 1 - x;
+  if (symmetryMode === 'off') return;
+  const mx = gridW - 1 - x, my = gridH - 1 - y;
+  if (symmetryMode === 'horizontal' || symmetryMode === 'both') {
     if (inBounds(mx, y)) grid[idx(mx, y)] = roleId;
   }
+  if (symmetryMode === 'vertical' || symmetryMode === 'both') {
+    if (inBounds(x, my)) grid[idx(x, my)] = roleId;
+  }
+  if (symmetryMode === 'both') {
+    if (inBounds(mx, my)) grid[idx(mx, my)] = roleId;
+  }
+}
+
+// Brush size — Pen and Erase paint a size×size (or circular, for the round
+// shape) block centered on the cursor instead of a single cell, same idea
+// as a real painting app's brush radius. Built on setCell() so symmetry
+// still applies per cell.
+let brushSize = 1;
+function paintBrush(cx, cy, roleId) {
+  const half = Math.floor((brushSize - 1) / 2);
+  const r = brushSize / 2;
+  for (let dy = 0; dy < brushSize; dy++) {
+    for (let dx = 0; dx < brushSize; dx++) {
+      if (brushShape === 'round') {
+        const ox = dx - half, oy = dy - half;
+        if (ox * ox + oy * oy > r * r) continue;
+      }
+      setCell(cx - half + dx, cy - half + dy, roleId);
+    }
+  }
+}
+function ellipseCells(x0, y0, x1, y1) {
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const rx = Math.max(Math.abs(x1 - x0) / 2, 0.5), ry = Math.max(Math.abs(y1 - y0) / 2, 0.5);
+  const pts = new Set();
+  const steps = Math.max(24, Math.round((rx + ry) * 6));
+  for (let i = 0; i < steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    const px = Math.round(cx + rx * Math.cos(a));
+    const py = Math.round(cy + ry * Math.sin(a));
+    pts.add(px + ',' + py);
+  }
+  return [...pts].map((s) => s.split(',').map(Number));
 }
 function lineCells(x0, y0, x1, y1) {
   const pts = [];
@@ -435,6 +801,93 @@ function floodFill(x0, y0, roleId) {
 }
 
 /* =========================================================================
+   Selection / clipboard — a rectangular marquee (Select tool), a one-slot
+   clipboard, and arrow-key nudging. Nudge is implemented as lift-then-
+   redrop rather than live dragging, which stays correct at any zoom level
+   without needing pointer-drag-delta tracking.
+   ========================================================================= */
+function doCopy() {
+  if (!selection) return;
+  const { x0, y0, x1, y1 } = selection;
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  const cells = new Array(w * h).fill(null);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) cells[y * w + x] = grid[idx(x0 + x, y0 + y)];
+  clipboard = { w, h, cells };
+}
+function doCut() {
+  if (!selection) return;
+  doCopy();
+  pushHistory();
+  const { x0, y0, x1, y1 } = selection;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) grid[idx(x, y)] = null;
+  renderAll();
+}
+function doDeleteSelection() {
+  if (!selection) return;
+  pushHistory();
+  const { x0, y0, x1, y1 } = selection;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) grid[idx(x, y)] = null;
+  renderAll();
+}
+function doPaste() {
+  if (!clipboard) return;
+  pushHistory();
+  const ox = selection ? selection.x0 : 0, oy = selection ? selection.y0 : 0;
+  for (let y = 0; y < clipboard.h; y++) {
+    for (let x = 0; x < clipboard.w; x++) {
+      const val = clipboard.cells[y * clipboard.w + x];
+      if (val !== null && inBounds(ox + x, oy + y)) grid[idx(ox + x, oy + y)] = val;
+    }
+  }
+  selection = {
+    x0: ox, y0: oy,
+    x1: Math.min(gridW - 1, ox + clipboard.w - 1), y1: Math.min(gridH - 1, oy + clipboard.h - 1),
+  };
+  updateStatSel();
+  renderAll();
+}
+function doDeselect() {
+  selection = null;
+  updateStatSel();
+  renderEditorCanvas();
+}
+function nudgeSelection(dx, dy) {
+  if (!selection) return;
+  const { x0, y0, x1, y1 } = selection;
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  const newX0 = clamp(x0 + dx, 0, gridW - w), newY0 = clamp(y0 + dy, 0, gridH - h);
+  if (newX0 === x0 && newY0 === y0) return;
+  const cells = new Array(w * h).fill(null);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) cells[y * w + x] = grid[idx(x0 + x, y0 + y)];
+  pushHistory();
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) grid[idx(x0 + x, y0 + y)] = null;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (cells[y * w + x] !== null) grid[idx(newX0 + x, newY0 + y)] = cells[y * w + x];
+  selection = { x0: newX0, y0: newY0, x1: newX0 + w - 1, y1: newY0 + h - 1 };
+  renderAll();
+}
+
+/* =========================================================================
+   Flip — reverses the grid in place along one axis. Flip Vertical inverts
+   which end reads as "roof" vs "ground floor" for this specific sprite, but
+   that's a legitimate creative move (an upside-down/inverted building) and
+   it's undo-able like everything else here.
+   ========================================================================= */
+function flipHorizontal() {
+  pushHistory();
+  const next = grid.slice();
+  for (let y = 0; y < gridH; y++) for (let x = 0; x < gridW; x++) next[idx(x, y)] = grid[idx(gridW - 1 - x, y)];
+  grid = next;
+  renderAll();
+}
+function flipVertical() {
+  pushHistory();
+  const next = grid.slice();
+  for (let y = 0; y < gridH; y++) for (let x = 0; x < gridW; x++) next[idx(x, y)] = grid[idx(x, gridH - 1 - y)];
+  grid = next;
+  renderAll();
+}
+
+/* =========================================================================
    Editor canvas rendering
    ========================================================================= */
 function renderEditorCanvas() {
@@ -469,9 +922,23 @@ function renderEditorCanvas() {
     for (let y = 0; y <= gridH; y++) { ctx.beginPath(); ctx.moveTo(0, y * zoom + 0.5); ctx.lineTo(canvas.width, y * zoom + 0.5); ctx.stroke(); }
   }
 
+  if (selection) {
+    const sx = selection.x0 * zoom, sy = selection.y0 * zoom;
+    const sw = (selection.x1 - selection.x0 + 1) * zoom, sh = (selection.y1 - selection.y0 + 1) * zoom;
+    ctx.save();
+    ctx.strokeStyle = '#CCFF00';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(sx + 1, sy + 1, sw - 2, sh - 2);
+    ctx.restore();
+  }
+
   const painted = grid.filter(Boolean).length;
   $('statSize').textContent = gridW + '×' + gridH;
   $('statPainted').textContent = painted;
+}
+function updateStatSel() {
+  $('statSel').textContent = selection ? (selection.x1 - selection.x0 + 1) + '×' + (selection.y1 - selection.y0 + 1) : '—';
 }
 
 /* =========================================================================
@@ -510,7 +977,7 @@ function renderContextPreview(cv, cx, contextDef) {
   const rows = buildRenderRows(targetHeight, maxHeight);
   const rowCount = rows.length;
 
-  const scale = Math.max(1, Math.min(Math.floor(150 / gridW), Math.floor(176 / rowCount)));
+  const scale = Math.max(1, Math.min(Math.floor(126 / gridW), Math.floor(136 / rowCount)));
   cv.width = gridW * scale;
   cv.height = rowCount * scale;
 
@@ -542,33 +1009,71 @@ function renderAllPreviews() {
   }
 }
 
+function renderRoleStats() {
+  const counts = {};
+  let total = 0;
+  for (const roleId of grid) { if (!roleId) continue; counts[roleId] = (counts[roleId] || 0) + 1; total++; }
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) { $('statsList').innerHTML = '<div class="stat-empty">Nothing painted yet.</div>'; return; }
+  const max = entries[0][1];
+  $('statsList').innerHTML = entries.map(([roleId, count]) => {
+    const role = ROLE_BY_ID[roleId];
+    if (!role) return '';
+    const pct = Math.round((count / max) * 100);
+    return `<div class="stat-row">
+      <span class="role-chip" style="background:${roleEditorColor(roleId)};"></span>
+      <span class="stat-label">${role.label}</span>
+      <span class="stat-bar-wrap"><span class="stat-bar" style="width:${pct}%;"></span></span>
+      <span class="stat-count">${count}</span>
+    </div>`;
+  }).join('');
+}
+
 function renderAll() {
   renderEditorCanvas();
   renderAllPreviews();
   updateBandVisual();
+  renderRoleStats();
 }
 
 /* =========================================================================
    UI: role palette
    ========================================================================= */
+function selectRole(roleId) {
+  activeRole = roleId;
+  document.querySelectorAll('.role-swatch').forEach((b) => b.classList.toggle('is-on', b.dataset.role === roleId));
+  document.querySelectorAll('.recent-roles-row button').forEach((b) => b.classList.toggle('is-on', b.dataset.role === roleId));
+}
+
 function buildRolePalette() {
   const cats = [...new Set(ROLES.map((r) => r.cat))];
   let html = '';
   for (const cat of cats) {
-    html += `<div class="role-cat">${cat}</div>`;
+    html += `<div class="role-cat">${cat}</div><div class="role-palette-grid">`;
     for (const role of ROLES.filter((r) => r.cat === cat)) {
-      html += `<button type="button" class="role-swatch${role.id === activeRole ? ' is-on' : ''}" data-role="${role.id}">
-        <span class="role-chip" style="background:${roleEditorColor(role.id)};"></span>${role.label}
+      html += `<button type="button" class="role-swatch${role.id === activeRole ? ' is-on' : ''}" data-role="${role.id}" title="${role.label}">
+        <span class="role-chip" style="background:${roleEditorColor(role.id)};"></span><span>${role.label}</span>
       </button>`;
     }
+    html += `</div>`;
   }
   $('rolePalette').innerHTML = html;
   $('rolePalette').querySelectorAll('.role-swatch').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      activeRole = btn.dataset.role;
-      $('rolePalette').querySelectorAll('.role-swatch').forEach((b) => b.classList.remove('is-on'));
-      btn.classList.add('is-on');
-    });
+    btn.addEventListener('click', () => { selectRole(btn.dataset.role); trackRecentRole(btn.dataset.role); });
+  });
+}
+
+// Recently-used strip — with 36 roles across 8 categories, jumping straight
+// back to whatever you just painted with beats re-scanning the full list.
+function renderRecentRoles() {
+  $('recentRolesTitle').style.display = recentRoles.length ? '' : 'none';
+  $('recentRolesRow').innerHTML = recentRoles.map((id) => {
+    const role = ROLE_BY_ID[id];
+    if (!role) return '';
+    return `<button type="button" class="role-swatch${id === activeRole ? ' is-on' : ''}" data-role="${id}" title="${role.label}" style="background:${roleEditorColor(id)};"></button>`;
+  }).join('');
+  $('recentRolesRow').querySelectorAll('button').forEach((btn) => {
+    btn.addEventListener('click', () => selectRole(btn.dataset.role));
   });
 }
 
@@ -610,15 +1115,16 @@ canvas.addEventListener('pointerdown', (e) => {
   strokeStart = { x, y };
   strokeSnapshot = grid.slice();
 
-  if (activeTool === 'pen') { pushHistory(); setCell(x, y, activeRole); renderEditorCanvas(); }
-  else if (activeTool === 'erase') { pushHistory(); setCell(x, y, null); renderEditorCanvas(); }
-  else if (activeTool === 'fill') { pushHistory(); floodFill(x, y, activeRole); renderAll(); }
+  if (activeTool === 'pen') { pushHistory(); trackRecentRole(activeRole); paintBrush(x, y, activeRole); renderEditorCanvas(); }
+  else if (activeTool === 'erase') { pushHistory(); paintBrush(x, y, null); renderEditorCanvas(); }
+  else if (activeTool === 'fill') { pushHistory(); trackRecentRole(activeRole); floodFill(x, y, activeRole); renderAll(); }
   else if (activeTool === 'eyedrop') {
     const picked = grid[idx(x, y)];
-    if (picked) {
-      activeRole = picked;
-      $('rolePalette').querySelectorAll('.role-swatch').forEach((b) => b.classList.toggle('is-on', b.dataset.role === picked));
-    }
+    if (picked) selectRole(picked);
+  }
+  else if (activeTool === 'select') {
+    selection = { x0: x, y0: y, x1: x, y1: y };
+    renderEditorCanvas();
   }
 });
 
@@ -627,12 +1133,21 @@ canvas.addEventListener('pointermove', (e) => {
   if (inBounds(x, y)) { $('statX').textContent = x; $('statY').textContent = y; }
   if (!isDrawing) return;
 
-  if (activeTool === 'pen') { setCell(x, y, activeRole); renderEditorCanvas(); }
-  else if (activeTool === 'erase') { setCell(x, y, null); renderEditorCanvas(); }
-  else if (activeTool === 'line' || activeTool === 'rect') {
+  if (activeTool === 'pen') { paintBrush(x, y, activeRole); renderEditorCanvas(); }
+  else if (activeTool === 'erase') { paintBrush(x, y, null); renderEditorCanvas(); }
+  else if (activeTool === 'line' || activeTool === 'rect' || activeTool === 'ellipse') {
     grid = strokeSnapshot.slice();
-    const pts = activeTool === 'line' ? lineCells(strokeStart.x, strokeStart.y, x, y) : rectCells(strokeStart.x, strokeStart.y, x, y);
+    const pts = activeTool === 'line' ? lineCells(strokeStart.x, strokeStart.y, x, y)
+      : activeTool === 'rect' ? rectCells(strokeStart.x, strokeStart.y, x, y)
+      : ellipseCells(strokeStart.x, strokeStart.y, x, y);
     for (const [px, py] of pts) setCell(px, py, activeRole);
+    renderEditorCanvas();
+  }
+  else if (activeTool === 'select') {
+    selection = {
+      x0: Math.max(0, Math.min(strokeStart.x, x)), y0: Math.max(0, Math.min(strokeStart.y, y)),
+      x1: Math.min(gridW - 1, Math.max(strokeStart.x, x)), y1: Math.min(gridH - 1, Math.max(strokeStart.y, y)),
+    };
     renderEditorCanvas();
   }
 });
@@ -640,7 +1155,8 @@ canvas.addEventListener('pointermove', (e) => {
 function endStroke() {
   if (!isDrawing) return;
   isDrawing = false;
-  if (activeTool === 'line' || activeTool === 'rect') pushHistory();
+  if (activeTool === 'line' || activeTool === 'rect' || activeTool === 'ellipse') pushHistory();
+  if (activeTool === 'select') updateStatSel();
   renderAllPreviews();
 }
 canvas.addEventListener('pointerup', endStroke);
@@ -650,25 +1166,68 @@ window.addEventListener('pointerup', endStroke);
 /* =========================================================================
    Toolbar / config wiring
    ========================================================================= */
+const TOOL_LABELS = { pen: 'Pen', line: 'Line', rect: 'Rect', ellipse: 'Ellipse', fill: 'Fill', eyedrop: 'Pick', erase: 'Erase', select: 'Select' };
+function updateToolOptionsLabel() {
+  const showsBrush = activeTool === 'pen' || activeTool === 'erase';
+  const showsSelect = activeTool === 'select';
+  $('brushOptionsGroup').hidden = !showsBrush;
+  $('selectOptionsGroup').hidden = !showsSelect;
+}
 document.querySelectorAll('.tool-btn[data-tool]').forEach((btn) => {
   btn.addEventListener('click', () => {
     activeTool = btn.dataset.tool;
     document.querySelectorAll('.tool-btn[data-tool]').forEach((b) => b.classList.remove('is-on'));
     btn.classList.add('is-on');
+    $('statTool').textContent = TOOL_LABELS[activeTool] || activeTool;
+    updateToolOptionsLabel();
   });
 });
-document.querySelectorAll('.zoom-row button').forEach((btn) => {
+document.querySelectorAll('.brush-size-row button[data-brush]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    brushSize = parseInt(btn.dataset.brush);
+    document.querySelectorAll('.brush-size-row button[data-brush]').forEach((b) => b.classList.remove('is-on'));
+    btn.classList.add('is-on');
+  });
+});
+$('brushShapeBtn').addEventListener('click', () => {
+  brushShape = brushShape === 'square' ? 'round' : 'square';
+  $('brushShapeBtn').innerHTML = brushShape === 'square' ? '&#9632; Square' : '&#9679; Round';
+});
+$('copyBtn').addEventListener('click', doCopy);
+$('cutBtn').addEventListener('click', doCut);
+$('pasteBtn').addEventListener('click', doPaste);
+$('deleteSelBtn').addEventListener('click', doDeleteSelection);
+$('deselectBtn').addEventListener('click', doDeselect);
+$('flipHBtn').addEventListener('click', flipHorizontal);
+$('flipVBtn').addEventListener('click', flipVertical);
+document.querySelectorAll('.zoom-mini button').forEach((btn) => {
   btn.addEventListener('click', () => {
     zoom = parseInt(btn.dataset.zoom);
-    document.querySelectorAll('.zoom-row button').forEach((b) => b.classList.remove('is-on'));
+    document.querySelectorAll('.zoom-mini button').forEach((b) => b.classList.remove('is-on'));
     btn.classList.add('is-on');
+    $('statZoom').textContent = zoom + '×';
     renderEditorCanvas();
   });
 });
-$('mirrorToggle').addEventListener('change', (e) => { mirrorOn = e.target.checked; });
-$('gridToggle').addEventListener('change', (e) => { showGrid = e.target.checked; renderEditorCanvas(); });
+function setSymmetryMode(mode) {
+  symmetryMode = mode;
+  $('symmetryBtn').classList.toggle('is-on', mode !== 'off');
+  $('symmetryBadge').textContent = mode === 'off' ? '' : SYMMETRY_LABEL[mode];
+}
+function cycleSymmetry() {
+  const next = SYMMETRY_MODES[(SYMMETRY_MODES.indexOf(symmetryMode) + 1) % SYMMETRY_MODES.length];
+  setSymmetryMode(next);
+}
+$('symmetryBtn').addEventListener('click', cycleSymmetry);
+$('gridToggle').addEventListener('change', (e) => {
+  showGrid = e.target.checked;
+  e.target.closest('.tool-btn').classList.toggle('is-on', showGrid);
+  renderEditorCanvas();
+});
 $('undoBtn').addEventListener('click', undo);
 $('redoBtn').addEventListener('click', redo);
+$('randomBtn').addEventListener('click', applyRandomBuilding);
+
 $('clearBtn').addEventListener('click', () => {
   if (!confirm('Clear the whole canvas? This can be undone with Ctrl+Z.')) return;
   pushHistory();
@@ -706,15 +1265,87 @@ $('bandEndIn').addEventListener('input', updateBandFromInputs);
 $('maxHeightIn').addEventListener('input', renderAllPreviews);
 
 /* ---- keyboard shortcuts ---- */
+const BRUSH_SIZES = [1, 2, 3, 4, 6, 8];
+function setBrushSize(size) {
+  brushSize = clamp(size, 1, 8);
+  document.querySelectorAll('.brush-size-row button[data-brush]').forEach((b) => b.classList.toggle('is-on', parseInt(b.dataset.brush) === brushSize));
+}
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-  const map = { b: 'pen', l: 'line', r: 'rect', f: 'fill', i: 'eyedrop', e: 'erase' };
-  if (map[e.key.toLowerCase()]) {
+  const map = { b: 'pen', l: 'line', r: 'rect', o: 'ellipse', f: 'fill', i: 'eyedrop', e: 'erase', s: 'select' };
+  if (!e.ctrlKey && !e.metaKey && map[e.key.toLowerCase()]) {
     activeTool = map[e.key.toLowerCase()];
     document.querySelectorAll('.tool-btn[data-tool]').forEach((b) => b.classList.toggle('is-on', b.dataset.tool === activeTool));
+    $('statTool').textContent = TOOL_LABELS[activeTool] || activeTool;
+    updateToolOptionsLabel();
   }
+  if (e.key === '[') { const i = BRUSH_SIZES.indexOf(brushSize); setBrushSize(BRUSH_SIZES[Math.max(0, i - 1)]); }
+  if (e.key === ']') { const i = BRUSH_SIZES.indexOf(brushSize); setBrushSize(BRUSH_SIZES[Math.min(BRUSH_SIZES.length - 1, i + 1)]); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
   if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redo(); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { e.preventDefault(); doCopy(); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x') { e.preventDefault(); doCut(); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { e.preventDefault(); doPaste(); }
+  if (e.key === 'Delete' || e.key === 'Backspace') { if (selection) { e.preventDefault(); doDeleteSelection(); } }
+  if (e.key === 'Escape') { doDeselect(); }
+  if (selection && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+    e.preventDefault();
+    const d = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
+    nudgeSelection(d[0], d[1]);
+  }
+});
+
+/* ---- right dock: tabs + mobile slide-in panel ---- */
+function setDockTab(tab) {
+  document.querySelectorAll('.dock-tabs button').forEach((b) => b.classList.toggle('is-on', b.dataset.tab === tab));
+  document.querySelectorAll('.dock-panel').forEach((p) => p.classList.toggle('is-on', p.dataset.tabPanel === tab));
+}
+document.querySelectorAll('.dock-tabs button').forEach((btn) => {
+  btn.addEventListener('click', () => setDockTab(btn.dataset.tab));
+});
+function openDock() { $('dockRight').classList.add('is-open'); $('dockBackdrop').classList.add('is-on'); }
+function closeDock() { $('dockRight').classList.remove('is-open'); $('dockBackdrop').classList.remove('is-on'); }
+function toggleDock() { $('dockRight').classList.contains('is-open') ? closeDock() : openDock(); }
+$('panelsToggleBtn').addEventListener('click', toggleDock);
+$('dockBackdrop').addEventListener('click', closeDock);
+
+/* ---- menu bar — File/Edit/View/Help. Each item just triggers the same
+   function or element the toolbar/keyboard already use. ---- */
+document.querySelectorAll('.menu-trigger').forEach((trigger) => {
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = trigger.closest('.menu');
+    const wasOpen = menu.classList.contains('is-open');
+    document.querySelectorAll('.menu.is-open').forEach((m) => m.classList.remove('is-open'));
+    if (!wasOpen) menu.classList.add('is-open');
+  });
+});
+document.addEventListener('click', () => {
+  document.querySelectorAll('.menu.is-open').forEach((m) => m.classList.remove('is-open'));
+});
+document.querySelectorAll('.menu-dropdown [data-action]').forEach((item) => {
+  item.addEventListener('click', () => {
+    const action = item.dataset.action;
+    const zoomMatch = action.match(/^zoom(\d+)$/);
+    if (action === 'import') $('importInput').click();
+    else if (action === 'exportJson') $('exportJsonBtn').click();
+    else if (action === 'exportPng') $('exportPngBtn').click();
+    else if (action === 'undo') undo();
+    else if (action === 'redo') redo();
+    else if (action === 'random') applyRandomBuilding();
+    else if (action === 'clear') $('clearBtn').click();
+    else if (action === 'toggleGrid') $('gridToggle').click();
+    else if (action === 'cycleSymmetry') cycleSymmetry();
+    else if (action === 'flipH') flipHorizontal();
+    else if (action === 'flipV') flipVertical();
+    else if (action === 'copy') doCopy();
+    else if (action === 'cut') doCut();
+    else if (action === 'paste') doPaste();
+    else if (action === 'deleteSel') doDeleteSelection();
+    else if (action === 'deselect') doDeselect();
+    else if (action === 'togglePanels') toggleDock();
+    else if (zoomMatch) document.querySelector(`.zoom-mini button[data-zoom="${zoomMatch[1]}"]`).click();
+  });
 });
 
 /* =========================================================================
@@ -760,6 +1391,70 @@ $('exportPngBtn').addEventListener('click', () => {
 });
 
 /* =========================================================================
+   Import — the inverse of the JSON export above. Unknown role ids (from a
+   newer/older palette version) are dropped rather than rejected outright,
+   so a file exported by a future version of this tool still loads here
+   with whatever it painted using roles that still exist.
+   ========================================================================= */
+function loadBuildingFromPayload(payload) {
+  const w = clamp(parseInt(payload.width) || gridW, 20, 50);
+  const h = clamp(parseInt(payload.height) || gridH, 34, 127);
+  const incoming = Array.isArray(payload.grid) ? payload.grid : [];
+  const newGrid = new Array(w * h).fill(null);
+  for (let i = 0; i < Math.min(incoming.length, newGrid.length); i++) {
+    const val = incoming[i];
+    newGrid[i] = (val && ROLE_BY_ID[val]) ? val : null;
+  }
+
+  pushHistory();
+  gridW = w; gridH = h; grid = newGrid;
+  bandStart = clamp(payload.band?.start ?? bandStart, 0, gridH);
+  bandEnd = clamp(payload.band?.end ?? bandEnd, bandStart, gridH);
+
+  $('gridWIn').value = gridW; $('gridHIn').value = gridH;
+  $('bandStartIn').max = gridH; $('bandEndIn').max = gridH;
+  $('bandStartIn').value = bandStart; $('bandEndIn').value = bandEnd;
+  $('maxHeightIn').value = payload.maxHeight || '';
+  $('landmarkToggle').checked = !!payload.landmark;
+  $('nameIn').value = payload.name || '';
+  $('creditIn').value = payload.credit || '';
+  $('notesIn').value = payload.notes || '';
+
+  renderAll();
+}
+
+$('importInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      loadBuildingFromPayload(JSON.parse(reader.result));
+      setDockTab('canvas');
+      if (window.innerWidth <= 860) openDock();
+    } catch (err) {
+      alert("Couldn't read that file — is it a Building Designer export?\n\n" + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ''; // allow re-importing the same filename later
+});
+
+/* ---- tooltip touch support — :hover never fires on tap, so toggle a class
+   on click and close it when tapping anywhere else. ---- */
+document.querySelectorAll('.tt').forEach((tt) => {
+  tt.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const wasOpen = tt.classList.contains('is-open');
+    document.querySelectorAll('.tt.is-open').forEach((o) => o.classList.remove('is-open'));
+    if (!wasOpen) tt.classList.add('is-open');
+  });
+});
+document.addEventListener('click', () => {
+  document.querySelectorAll('.tt.is-open').forEach((o) => o.classList.remove('is-open'));
+});
+
+/* =========================================================================
    Demo seed — a small recognizable tower so the tool opens with real
    content instead of a blank grid.
    ========================================================================= */
@@ -791,9 +1486,143 @@ function seedDemoBuilding() {
   for (let y = bandEnd + 1; y < gridH; y++) for (let x = doorX; x < doorX + doorW; x++) set(x, y, 'door');
 }
 
+/* =========================================================================
+   Random building — same structural rules as seedDemoBuilding() (a roofline
+   cap that renders once, a repeating band, a ground floor with a door), but
+   every parameter inside that shape is rolled independently: dimensions,
+   band proportions, which roles show up in the windows and how densely,
+   whether there's a vertical frame rhythm at all, edge shading, balconies,
+   trim bands, accent signage, rooftop treatment, ground style, and an
+   occasional landmark cap. It's the same "paint roles, not colors" system
+   throughout — this never touches raw color, only which role goes where —
+   so nothing it produces can fall outside the aesthetic the way picking
+   arbitrary RGB values could.
+   ========================================================================= */
+function randomInt(lo, hi) { return lo + Math.floor(Math.random() * (hi - lo + 1)); }
+function randomChance(p) { return Math.random() < p; }
+function randomWeighted(entries) {
+  const total = entries.reduce((s, e) => s + e[1], 0);
+  let r = Math.random() * total;
+  for (const [v, w] of entries) { if (r < w) return v; r -= w; }
+  return entries[entries.length - 1][0];
+}
+
+function generateRandomBuilding() {
+  const w = randomInt(20, 50);
+  const h = randomInt(34, 100);
+  const roofH = randomInt(2, 6);
+  const groundH = randomInt(3, 8);
+  const bandStartNew = roofH;
+  const bandEndNew = h - groundH;
+
+  const newGrid = new Array(w * h).fill(null);
+  const set = (x, y, role) => { if (x >= 0 && x < w && y >= 0 && y < h) newGrid[y * w + x] = role; };
+
+  // Every building gets its own "personality" for which window role shows
+  // up most — this is where "random colors" actually comes from, since each
+  // role resolves to a real, different color per city context.
+  const windowMix = [
+    ['windowLit', randomInt(2, 10)],
+    ['windowDark', randomInt(1, 6)],
+    ['windowGlass', randomInt(1, 8)],
+  ];
+  const frameEvery = randomWeighted([[0, 2], [3, 3], [4, 4], [5, 3], [6, 2]]); // 0 = glass curtain wall, no verticals
+  const windowDensity = 0.55 + Math.random() * 0.4;
+  const useEdgeShading = randomChance(0.6);
+  const mirrorSymmetric = randomChance(0.5);
+  const balconyEvery = randomChance(0.35) ? randomInt(4, 8) : 0;
+  const trimBandEvery = randomChance(0.3) ? randomInt(6, 14) : 0;
+  const accentBandCount = randomWeighted([[0, 5], [1, 3], [2, 1]]);
+  const signageRole = randomWeighted([['accent', 5], ['neonSign', 2], ['billboard', 2], ['banner', 2], ['flag', 1]]);
+  const rooftopStyle = randomWeighted([['none', 4], ['single', 4], ['cluster', 2]]);
+  const rooftopRole = randomWeighted([['rooftopObj', 4], ['antenna', 3], ['satelliteDish', 2], ['solarPanel', 2], ['waterTower', 2], ['chimney', 2]]);
+  const groundStyle = randomWeighted([['door', 5], ['wideGlass', 3], ['stepped', 2]]);
+  const weatheringRole = randomChance(0.35) ? randomWeighted([['rust', 3], ['moss', 3], ['crack', 2], ['graffiti', 1], ['soot', 1]]) : null;
+  const weatheringDensity = 0.02 + Math.random() * 0.05;
+  const hasIvy = randomChance(0.2);
+  const hasRooftopGarden = rooftopStyle !== 'none' && randomChance(0.15);
+  const isLandmark = randomChance(0.15);
+  const maxHeight = isLandmark ? randomInt(Math.max(h + 10, 50), 150) : 0;
+
+  // roofline cap — renders once, never part of the repeating band
+  const roofInset = randomInt(2, Math.max(2, Math.floor(w * 0.2)));
+  for (let y = 0; y < roofH; y++) for (let x = roofInset; x < w - roofInset; x++) set(x, y, 'roofline');
+  if (hasRooftopGarden) for (let x = roofInset; x < w - roofInset; x++) set(x, 0, 'rooftopGarden');
+  if (rooftopStyle === 'single') {
+    set(Math.floor(w / 2), 0, rooftopRole);
+  } else if (rooftopStyle === 'cluster') {
+    const count = randomInt(2, 4);
+    for (let i = 0; i < count; i++) set(randomInt(roofInset, w - roofInset - 1), 0, rooftopRole);
+  }
+
+  // repeating band — the part that actually stretches at render time
+  const half = mirrorSymmetric ? Math.ceil(w / 2) : w;
+  for (let y = bandStartNew; y < bandEndNew; y++) {
+    const localRow = y - bandStartNew;
+    const trimRow = trimBandEvery > 0 && localRow % trimBandEvery === 0;
+    const balconyRow = !trimRow && balconyEvery > 0 && localRow > 0 && localRow % balconyEvery === 0;
+    for (let x = 0; x < half; x++) {
+      let role;
+      if (trimRow) role = 'trim';
+      else if (balconyRow) role = 'balcony';
+      else if (frameEvery > 0 && x % frameEvery === 0) role = 'frame';
+      else if (Math.random() < windowDensity) role = randomWeighted(windowMix);
+      else if (weatheringRole && Math.random() < weatheringDensity) role = weatheringRole;
+      else role = 'wallBase';
+      set(x, y, role);
+      if (mirrorSymmetric) set(w - 1 - x, y, role);
+    }
+    if (useEdgeShading) { set(0, y, 'wallShadow'); set(w - 1, y, 'wallHi'); }
+    else if (hasIvy && Math.random() < 0.5) { set(0, y, 'ivy'); set(w - 1, y, 'ivy'); }
+  }
+
+  // accent signage bands, scattered within the repeating region — every
+  // building picks one signage role and uses it consistently, rather than
+  // mixing billboard/neon/banner/flag on the same facade.
+  for (let i = 0; i < accentBandCount; i++) {
+    if (bandEndNew - bandStartNew < 5) break;
+    const ay = randomInt(bandStartNew + 2, bandEndNew - 2);
+    for (let x = Math.floor(w * 0.15); x < w - Math.floor(w * 0.15); x++) set(x, ay, signageRole);
+  }
+
+  // ground floor — renders once, never repeats
+  for (let y = bandEndNew; y < h; y++) {
+    for (let x = 1; x < w - 1; x++) set(x, y, groundStyle === 'wideGlass' ? 'windowGlass' : 'ground');
+  }
+  const doorW = randomInt(3, Math.max(3, Math.floor(w * 0.15)));
+  const doorX = Math.floor(w / 2) - Math.floor(doorW / 2);
+  const doorY0 = groundStyle === 'stepped' ? bandEndNew + Math.max(1, Math.floor(groundH * 0.35)) : bandEndNew + 1;
+  for (let y = doorY0; y < h; y++) for (let x = doorX; x < doorX + doorW; x++) set(x, y, 'door');
+
+  return { w, h, grid: newGrid, bandStart: bandStartNew, bandEnd: bandEndNew, maxHeight, isLandmark };
+}
+
+function applyRandomBuilding() {
+  const result = generateRandomBuilding();
+  pushHistory();
+  gridW = result.w; gridH = result.h; grid = result.grid;
+  bandStart = result.bandStart; bandEnd = result.bandEnd;
+
+  $('gridWIn').value = gridW; $('gridHIn').value = gridH;
+  $('bandStartIn').max = gridH; $('bandEndIn').max = gridH;
+  $('bandStartIn').value = bandStart; $('bandEndIn').value = bandEnd;
+  $('maxHeightIn').value = result.maxHeight || '';
+  $('landmarkToggle').checked = result.isLandmark;
+
+  renderAll();
+}
+
 /* ---- init ---- */
+if (window.innerWidth < 760) {
+  zoom = 6;
+  document.querySelectorAll('.zoom-mini button').forEach((b) => b.classList.toggle('is-on', b.dataset.zoom === '6'));
+}
+$('statZoom').textContent = zoom + '×';
+updateToolOptionsLabel();
+updateStatSel();
 $('bandStartIn').max = gridH; $('bandEndIn').max = gridH;
 buildRolePalette();
+renderRecentRoles();
 buildPreviewGrid();
 seedDemoBuilding();
 renderAll();
